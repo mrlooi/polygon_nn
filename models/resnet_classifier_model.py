@@ -61,5 +61,14 @@ class ResnetClassifierModel(BaseModel):
         self.backward_D()
         self.optimizer_D.step()
 
-    def get_accuracy(self):
-        return accuracy(self.pred_labels, self.labels, topk=(1,))
+
+    def print_metrics(self):
+        print("Loss: %.3f, Acc: %.3f%%"%(self._get_loss(), self._get_accuracy()))
+
+    def _get_loss(self):
+        return float(self.loss_D.cpu().detach().numpy())
+
+    def _get_accuracy(self):
+        acc = accuracy(self.pred_labels, self.labels, topk=(1,))
+        acc = float(acc[0].cpu().detach().numpy())
+        return acc

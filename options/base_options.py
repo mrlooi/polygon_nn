@@ -3,7 +3,7 @@ import os
 from util import util
 import torch
 import models
-import data
+import dataset
 
 
 class BaseOptions():
@@ -67,7 +67,7 @@ class BaseOptions():
 
         # modify dataset-related parser options
         dataset_name = opt.dataset_mode
-        dataset_option_setter = data.get_option_setter(dataset_name)
+        dataset_option_setter = dataset.get_option_setter(dataset_name)
         parser = dataset_option_setter(parser, self.isTrain)
 
         self.parser = parser

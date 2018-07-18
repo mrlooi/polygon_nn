@@ -2,8 +2,8 @@ import time
 
 from options.train_options import TrainOptions
 from models import create_model
-from data import CreateDataLoader
-# from util.visualizer import Visualizer
+from dataset import CreateDataLoader
+from util.visualizer import Visualizer
 
 # python train.py --dataroot /home/vincent/hd/datasets/cifar --dataset_mode cifar --batchSize 16
 
@@ -16,7 +16,7 @@ if __name__ == '__main__':
 
     model = create_model(opt)
     model.setup(opt)
-    # visualizer = Visualizer(opt)
+    visualizer = Visualizer(opt)
     total_steps = 0
 
     for epoch in range(opt.epoch_count, opt.niter + opt.niter_decay + 1):
@@ -26,9 +26,11 @@ if __name__ == '__main__':
 
         for i, data in enumerate(dataset):
             iter_start_time = time.time()
-            if total_steps % opt.print_freq == 0:
-                t_data = iter_start_time - iter_data_time
-        #     visualizer.reset()
+            
+            # if total_steps % opt.print_freq == 0:
+            t_data = iter_start_time - iter_data_time
+
+            visualizer.reset()
             total_steps += opt.batchSize
             epoch_iter += opt.batchSize
             model.set_input(data)
@@ -45,13 +47,13 @@ if __name__ == '__main__':
             #     if opt.display_id > 0:
             #         visualizer.plot_current_losses(epoch, float(epoch_iter) / dataset_size, opt, losses)
 
+
         #     if total_steps % opt.save_latest_freq == 0:
         #         print('saving the latest model (epoch %d, total_steps %d)' %
         #               (epoch, total_steps))
         #         model.save_networks('latest')
 
-            print("Loss %.3f"%float(model.loss_D.cpu().detach().numpy()))
-            print(model.get_accuracy())
+            model.print_metrics()
 
             iter_data_time = time.time()
         if epoch % opt.save_epoch_freq == 0:

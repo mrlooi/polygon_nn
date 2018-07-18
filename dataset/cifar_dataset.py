@@ -1,12 +1,10 @@
 import os.path
-from data.base_dataset import BaseDataset
+from dataset.base_dataset import BaseDataset
 import random
 import numpy as np
 import torch
 import torchvision.transforms as ttransforms
 import cv2
-import glob
-
 
 LABELS = ['airplane','automobile','bird','cat','deer','dog','frog','horse','ship','truck']
 
@@ -22,7 +20,7 @@ class CifarDataset(BaseDataset):
         parser.set_defaults(num_classes=len(LABELS))
         return parser
 
-    def initialize(self, opt, calculate_max_depth=False):
+    def initialize(self, opt):
         self.opt = opt
 
         # self.opt.input_nc = 1 # grayscale
@@ -32,9 +30,8 @@ class CifarDataset(BaseDataset):
         self.num_classes = len(LABELS)
 
         self.root = opt.dataroot
-        dirs_keyword = os.path.join(opt.dataroot, "%s_images*"%(opt.phase))
 
-        label_file = os.path.join(opt.dataroot, "train_labels.txt")
+        label_file = os.path.join(opt.dataroot, "%s_labels.txt"%(opt.phase))
         self.A_data = []
         with open(label_file, "r") as f: 
             data = [i.strip("\n") for i in f.readlines()]

@@ -268,7 +268,8 @@ class UnetSkipConnectionBlock(nn.Module):
         if self.outermost:
             return self.model(x)
         else:
-            return torch.cat([x, self.model(x)], 1)
+            xx = self.model(x)
+            return torch.cat([x, xx], 1)
 
 
 def define_D(model_type, num_classes,

@@ -1,5 +1,4 @@
 import torch
-import torchvision.models as models
 from .base_model import BaseModel, accuracy
 from . import networks
 

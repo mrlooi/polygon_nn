@@ -1,9 +1,12 @@
 import os.path
-from dataset.base_dataset import BaseDataset
 import random
 import numpy as np
 import torch
 import cv2
+
+from dataset.base_dataset import BaseDataset
+from models import networks
+
 
 MASK_SIZE = (224,224)
 
@@ -15,7 +18,7 @@ def _generate_polygons(mask_size, poly_cnt, mask_padding=(0,0)):
 
 def write_data(polygons, out_file):
     with open(out_file,'w') as f: 
-        np.save(f, polys)
+        np.save(f, polygons)
     print("Wrote to %s"%(out_file))
 
 def read_data(mask_file):
@@ -25,7 +28,7 @@ def read_data(mask_file):
 class TestMaskDataset(BaseDataset):
     @staticmethod
     def modify_commandline_options(parser, is_train):
-        parser.set_defaults(num_classes=len(LABELS))
+        parser.set_defaults(model='simple_unet')
         return parser
 
 
@@ -59,8 +62,9 @@ class TestMaskDataset(BaseDataset):
         m = cv2.fillConvexPoly(self.mask.copy(), polys, (255, 255, 255))
         mh,mw,_ = m.shape
         # # resize 
-        # osize = (self.opt.loadSize, self.opt.loadSize)
-        # A_img = cv2.resize(A_img, osize)
+        osize = (self.opt.fineSize, self.opt.fineSize)
+        m = cv2.resize(m, osize)
+        m_gray = cv2.cvtColor(m, cv2.COLOR_BGR2GRAY)
 
         # transpose from H,W,3 to 3,H,W
         A = np.transpose(m, [2,0,1])
@@ -68,7 +72,20 @@ class TestMaskDataset(BaseDataset):
         A = torch.from_numpy(A).float()
         A /= 255
 
-        return {'data': A, 'polys': polys}
+        # single channel i.e. grayscale version, but for masks still 0 and 255
+        _,m_gray = cv2.threshold(m_gray, 10, 255, cv2.THRESH_BINARY)  # thresh the results of interpolation
+        A_gt = torch.from_numpy(m_gray).float()
+        # from H,W to 1,H,W
+        A_gt = A_gt.unsqueeze(0)
+        A_gt /= 255
+
+
+        polys = polys.astype(np.float32)
+        polys[:,0] *= (self.opt.fineSize/float(mh))
+        polys[:,1] *= (self.opt.fineSize/float(mw))
+        polys = polys.astype(np.int32)
+
+        return {'data': A, 'gt': A_gt, 'polys': polys}
 
     def __len__(self):
         return self.size
@@ -92,7 +109,7 @@ def sample():
 
     polys = read_data(mask_file)
 
-    for ix, p in enumerate(polys):
+    for ix, p in enumerate(polys[:10]):
         mask = np.zeros(mask_size, np.uint8)
         p = np.array(polys[ix])
         # p = p[p[:,1].argsort()]
@@ -100,6 +117,7 @@ def sample():
         cv2.imshow("m", m)
         cv2.waitKey(0)
     
+
 
 if __name__ == '__main__':
     # sample()
@@ -110,22 +128,69 @@ if __name__ == '__main__':
             self.phase = "train"
             self.resize_or_crop = 'resize_and_crop'
             self.serial_batches = False
+            self.loadSize = 256
+            self.fineSize = 256
             self.no_flip = False
             self.isTrain = True
+            self.ngf = 64
+            self.norm = 'instance'
+            self.no_dropout = False
+            self.init_type = 'normal'
+            self.init_gain = 0.02
 
     opt = Opt()
+
+    netG = networks.define_G(3, 1, opt.ngf, 
+                              "unet_256", opt.norm, not opt.no_dropout, opt.init_type, opt.init_gain, [0])
 
     idd = TestMaskDataset()
     idd.initialize(opt)
 
-    for i in range(10):
-        data = idd[i]
-        A = data['data']
-        A_polys = data['polys']
+    dd = idd[0]
+    sample_img = dd['data'].unsqueeze(0).cuda()
+    sample_gt = dd['gt'].unsqueeze(0).cuda()
+    # torch.cat((sample_gt,sample_gt), 0)
 
-        A_np = A.cpu().numpy()
-        A_np = np.transpose(A_np, [1,2,0])
+    pred_mask = netG.forward(sample_img)
 
-        cv2.imshow("m", A_np)
-        # cv2.imshow("resized", cv2.resize(A_np, (128,128)))
-        cv2.waitKey(0)
+    bce_criterion = torch.nn.BCEWithLogitsLoss(weight=None, reduce=True)
+    bce_criterion = torch.nn.BCEWithLogitsLoss(weight=None, reduce=False)
+    bce_criterion2 = torch.nn.BCELoss(weight=None, reduce=False)
+
+    bce_loss_gt = torch.mean(bce_criterion2(sample_gt, sample_gt))
+    bce_loss = torch.mean(bce_criterion2(torch.sigmoid(pred_mask), sample_gt))
+    bce_loss = bce_criterion(pred_mask, sample_gt)
+
+    img = sample_img.cpu().detach().numpy().squeeze()
+    img = np.transpose(img, [1,2,0])
+    gt_mask = sample_gt.cpu().detach().numpy().squeeze()
+
+    pred_mask_cpu = pred_mask.cpu().detach().numpy()
+    m = pred_mask_cpu.squeeze()
+    m = (m+1)/2  # tanh output to 0 - 1 values
+    m[m<0.5] = 0
+    m[m>=0.5] = 1
+
+    cv2.imshow("img", img)
+    cv2.imshow("gt", gt_mask)
+    cv2.imshow("pred_mask", m)
+    cv2.waitKey(0)
+
+    # for i in range(10):
+    #     data = idd[i]
+    #     A = data['data']
+    #     A_polys = data['polys']
+
+    #     A_np = A.cpu().numpy()
+    #     A_np = np.transpose(A_np, [1,2,0])
+    #     A_np *= 255
+    #     A_np = A_np.astype(np.uint8).copy()
+
+    #     for p in A_polys:
+    #         cv2.circle(A_np, tuple(p), 2, (255,0,0))
+
+    #     cv2.imshow("m", A_np)
+    #     # cv2.imshow("resized", cv2.resize(A_np, (128,128)))
+    #     cv2.waitKey(0)
+
+

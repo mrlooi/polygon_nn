@@ -11,7 +11,7 @@ class BaseOptions():
         self.initialized = False
 
     def initialize(self, parser):
-        parser.add_argument('--dataroot', required=True, help='path to images (should have subfolders trainA, trainB, valA, valB, etc)')
+        parser.add_argument('--dataroot', type=str, default="", help='path to images (should have subfolders trainA, trainB, valA, valB, etc)')
         parser.add_argument('--batchSize', type=int, default=1, help='input batch size')
         parser.add_argument('--loadSize', type=int, default=286, help='scale images to this size')
         parser.add_argument('--fineSize', type=int, default=256, help='then crop to this size')
@@ -24,7 +24,7 @@ class BaseOptions():
         parser.add_argument('--n_layers_D', type=int, default=3, help='only used if which_model_netD==n_layers')
         parser.add_argument('--gpu_ids', type=str, default='0', help='gpu ids: e.g. 0  0,1,2, 0,2. use -1 for CPU')
         parser.add_argument('--name', type=str, default='experiment_name', help='name of the experiment. It decides where to store samples and models')
-        parser.add_argument('--dataset_mode', type=str, required=True, help='chooses how datasets are loaded.')
+        parser.add_argument('--dataset_mode', type=str, default="", help='chooses how datasets are loaded.')
         parser.add_argument('--model', type=str, default='resnet_classifier',
                             help='chooses which model to use')
         parser.add_argument('--which_direction', type=str, default='AtoB', help='AtoB or BtoA')
@@ -45,6 +45,9 @@ class BaseOptions():
         parser.add_argument('--verbose', action='store_true', help='if specified, print more debugging information')
         parser.add_argument('--suffix', default='', type=str, help='customized suffix: opt.name = opt.name + suffix: e.g., {model}_{which_model_netG}_size{loadSize}')
         parser.add_argument('--num_classes', type=int, default=100, help='number of classes')
+        parser.add_argument('--image_set', type=str, default=None, help='LabelMe option only: image/annot folder name in LabelMe directory')
+        parser.add_argument('--valid_classes', nargs='*', default=[], help='LabelMe option only: valid classes (list)')
+        parser.add_argument('--invalid_classes', nargs='*', default=[], help='LabelMe option only: invalid classes (list)')
         self.initialized = True
         return parser
 

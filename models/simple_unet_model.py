@@ -37,6 +37,7 @@ class SimpleUnetModel(BaseModel):
     def set_input(self, input):
         self.data = input['data'].to(self.device)
         self.mask_gt = input['gt'].to(self.device)
+        self.image_paths = input['path']
 
     def forward(self):
         self.pred_mask = self.netG(self.data)
@@ -67,3 +68,9 @@ class SimpleUnetModel(BaseModel):
 
     def _get_loss(self):
         return float(self.loss_G.cpu().detach().numpy())
+
+    def inference(self, x):
+        data = x.to(self.device)
+        with torch.no_grad():
+            pred_mask = self.netG(data)
+        return pred_mask

@@ -5,7 +5,6 @@ import torch
 import cv2
 
 from dataset.base_dataset import BaseDataset
-from models import networks
 
 
 MASK_SIZE = (224,224)
@@ -90,9 +89,6 @@ class TestMaskDataset(BaseDataset):
     def __len__(self):
         return self.size
 
-    def get_class(self, index):
-        return self.labels[index]
-
     def name(self):
         return 'TestMaskDataset'
 
@@ -120,6 +116,7 @@ def sample():
 
 
 if __name__ == '__main__':
+    from models import networks
     # sample()
 
     class Opt():

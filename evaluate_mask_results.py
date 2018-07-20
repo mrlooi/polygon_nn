@@ -1,52 +1,35 @@
 import numpy as np
 import cv2
 
-def approx_poly(cnts, eps=0.01):
-    arclen = cv2.arcLength(cnts, True)
-    epsilon = arclen * eps
-    approx = cv2.approxPolyDP(cnts, epsilon, True)
-    return approx
-
-def get_mask_contours(mask, is_sorted=True):
-    m = mask.copy()
-    dims = len(m.shape)
-    if dims == 3 and m.shape[2] == 3: # color, convert to gray
-        m = cv2.cvtColor(m, cv2.COLOR_BGR2GRAY)
-    _,m = cv2.threshold(m, 20, 255, cv2.THRESH_BINARY) # thresh it 
-    _, contours, hierarchy = cv2.findContours(m,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
-
-    if is_sorted:
-        contours = sorted(contours, key = cv2.contourArea, reverse = True)
-    return contours
-
-def get_mask_approx_poly(mask, eps=0.01):
-    contours = get_mask_contours(mask, is_sorted=True)
-    if len(contours) == 0:
-        return ([], [])
-    cnts = contours[0]
-    approx = approx_poly(cnts, eps=eps)
-    return (contours, approx.squeeze())
+from util.mask import compute_mask_iou, get_mask_approx_poly
 
 if __name__ == '__main__':
     import sys
     import os, glob
 
-    img_dir = "../checkpoints/experiment_name/web/images"
+    img_dir = "./checkpoints/unet1/web/images"
     # img_file = "../checkpoints/experiment_name/web/images/epoch063_data.png"
+
+    iou_list = []
 
     for img_file in glob.glob(img_dir + "/*_data.png"):
         f = img_file.replace("_data.png","")
         mask_file = f + "_pred_mask.png"
+        gt_mask_file = f + "_mask_gt.png"
 
         img = cv2.imread(img_file)
+        gt_mask = cv2.imread(gt_mask_file)
+        gt_mask = cv2.cvtColor(gt_mask, cv2.COLOR_BGR2GRAY)
+        _,gt_mask = cv2.threshold(gt_mask, 130, 255, cv2.THRESH_BINARY)
+
         mask = cv2.imread(mask_file)
         img_copy = img.copy()
 
-        if mask is None or img is None:
-            print("Could not read %s or %s"%(mask_file, img_file))
+        if mask is None or img is None or gt_mask is None:
+            print("Could not read %s or %s or %s"%(mask_file, img_file, gt_mask_file))
             continue
 
-        print("Showing %s and %s"%(img_file, mask_file))
+        print("Showing %s"%(img_file))#, mask_file, gt_mask_file))
 
         eps = 0.01
         contours, approx = get_mask_approx_poly(mask, eps=eps)
@@ -66,9 +49,19 @@ if __name__ == '__main__':
                 cv2.circle(mask, p, 3, (255,0,0))
         # print(approx)
 
+        mask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
+        _,mask = cv2.threshold(mask, 20, 255, cv2.THRESH_BINARY)
+
+        iou = compute_mask_iou(gt_mask / 255, mask / 255)
+        iou_list.append(iou)
+
+        print("Iou: %.3f, mean iou: %.3f"%(iou, np.mean(iou_list)))
+
         cv2.imshow("img", img)
         cv2.imshow("pred mask", mask)
+        cv2.imshow("gt mask", gt_mask)
         cv2.imshow("im_copy", img_copy)
         cv2.waitKey(0)
 
         
+    print("Total mean IOU: %.3f"%(np.mean(iou_list)))

@@ -3,7 +3,7 @@ import cv2
 import torch
 import glob
 
-from app.mask_polygon import get_mask_approx_poly
+from util.mask import get_mask_approx_poly
 from options.test_options import TestOptions
 from models.simple_unet_model import SimpleUnetModel
 from dataset.labelme_mask_dataset import LabelMeMaskDataset
@@ -104,6 +104,7 @@ def test_on_dir(model):
 
 
 if __name__ == '__main__':
+    import sys
 
     opt = get_init_op()
     model = SimpleUnetModel()
@@ -114,11 +115,15 @@ if __name__ == '__main__':
 
     eps = 0.01
     
-    # img_file = "/home/vincent/LabelMe/Images/singulation_test/data_1_149.jpg"
-    img_file = "/home/vincent/LabelMe/Images/loading/data1_0_11.jpg"
+    img_file = "/home/vincent/LabelMe/Images/singulation_test/rgb2_0_281.jpg"
+    # img_file = "/home/vincent/LabelMe/Images/unity_boxes/boxes_201708311714499595.jpg"
+    # img_file = "/home/vincent/Documents/deep_learning/polyrnn-pp/imgs2/horse.png"
 
     # Read image
     img = cv2.imread(img_file)
+    if img is None:
+        print("Could not read %s"%(img_file))
+        sys.exit(1)
     img_copy = img.copy()
      
     # Select ROI
@@ -130,6 +135,7 @@ if __name__ == '__main__':
         r = cv2.selectROI(img_copy, fromCenter)
          
         # Crop image
+        print(r)
         img_crop = img[int(r[1]):int(r[1]+r[3]), int(r[0]):int(r[0]+r[2])]
         
         h_ratio = r[3] / float(resize_shape[0])
@@ -145,7 +151,6 @@ if __name__ == '__main__':
         contours, approx = get_mask_approx_poly(mask, eps=eps)
         if len(contours) == 0:
             print("Could not find contours!")
-            import sys
             sys.exit(1)
         cnts = contours[0]
         cv2.drawContours(img_crop_copy, [cnts], 0, (0,0,255), 1)

@@ -1,5 +1,6 @@
 import numpy as np
 import cv2
+import sys
 
 import torch
 import torch.nn as nn
@@ -10,6 +11,37 @@ IMG_SIZE = 64
 
 def sigmoid(x):
     return (1 / (1 + np.exp(-x)))
+
+class persistent_locals(object):
+    def __init__(self, func):
+        self._locals = {}
+        self.func = func
+
+    def __call__(self, *args, **kwargs):
+        def tracer(frame, event, arg):
+            if event=='return':
+                l = frame.f_locals.copy()
+                self._locals = l
+                for k,v in l.items():
+                    globals()[k] = v
+
+        # tracer is activated on next call, return or exception
+        sys.setprofile(tracer)
+        try:
+            # trace the function call
+            res = self.func(*args, **kwargs)
+            
+        finally:
+            # disable tracer and replace with old one
+            sys.setprofile(None)
+        return res
+
+    def clear_locals(self):
+        self._locals = {}
+
+    @property
+    def locals(self):
+        return self._locals
 
 class ConvNet(nn.Module):
     def __init__(self):
@@ -81,49 +113,11 @@ class DataGenerator():
             tm = tm.cuda()
         return tm, tki
 
+@persistent_locals
 def train(model, dg):
+
     epochs = 10
     n_iters = 100
-    batch_size = 16
-    lr = 3e-3
-
-    model.train()
-
-    optimizer = optim.Adam(model.parameters(), lr=lr, betas=(0.9, 0.999))
-
-    for iter in range(n_iters):
-        data = dg.next_batch(batch_size)
-
-        train_x, train_y = dg.convert_data_batch_to_tensor(data)
-        train_x = train_x.cuda()
-        train_y = train_y.cuda()
-
-        optimizer.zero_grad()
-        output = model(train_x)
-        loss = F.nll_loss(output, train_y)
-        loss = torch.mean(loss)
-        loss.backward()
-        optimizer.step()
-
-        print(loss.item())
-
-if __name__ == '__main__':
-    dg = DataGenerator()
-    data = dg.next_batch(8)
-
-    # m = data[0][0]
-    # cv2.imshow("m", m)
-    # cv2.waitKey(0)
-
-    model = ConvNet()
-    model.cuda()
-    train_x, train_y = dg.convert_data_batch_to_tensor(data, use_cuda=True)
-    model(train_x)
-
-    # train(model, dg)
-
-    epochs = 10
-    n_iters = 10
     batch_size = 16
     lr = 3e-3
 
@@ -145,6 +139,8 @@ if __name__ == '__main__':
 
         print(loss.item())
 
+@persistent_locals
+def test(model, dg):
     model.eval()
     test_batch_sz = 8
     test_data = dg.next_batch(test_batch_sz)
@@ -178,3 +174,21 @@ if __name__ == '__main__':
         cv2.imshow("gt", m)
         cv2.imshow("pred", m_copy)
         cv2.waitKey(0)
+
+
+if __name__ == '__main__':
+    dg = DataGenerator()
+    data = dg.next_batch(8)
+
+    # m = data[0][0]
+    # cv2.imshow("m", m)
+    # cv2.waitKey(0)
+
+    model = ConvNet()
+    model.cuda()
+    train_x, train_y = dg.convert_data_batch_to_tensor(data, use_cuda=True)
+    model(train_x)
+
+    train(model, dg)
+    test(model, dg)
+

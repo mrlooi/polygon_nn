@@ -7,10 +7,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 
-IMG_SIZE = 64
+"""
+Keypoints tutorial
+1. Change the data padding size
+2. Change the conv kernel size according to padding size
+"""
 
-def sigmoid(x):
-    return (1 / (1 + np.exp(-x)))
+IMG_SIZE = 128
 
 class persistent_locals(object):
     def __init__(self, func):
@@ -43,27 +46,6 @@ class persistent_locals(object):
     def locals(self):
         return self._locals
 
-class ConvNet(nn.Module):
-    def __init__(self):
-        super(ConvNet, self).__init__()
-        kernel_sz = 3
-        stride = 1
-        pad = 1
-        self.conv1 = nn.Conv2d(3, 16, kernel_size=kernel_sz, stride=stride, padding=pad)
-        self.conv2 = nn.Conv2d(16, 32, kernel_size=kernel_sz, stride=stride, padding=pad)
-        self.upconv1 = nn.ConvTranspose2d(32, 16, kernel_size=kernel_sz, stride=stride, padding=pad)
-        self.upconv2 = nn.ConvTranspose2d(16, 2, kernel_size=kernel_sz, stride=stride, padding=pad)
-
-    def forward(self, x):
-        batch_sz = len(x)
-        x = F.relu(self.conv1(x))
-        x = F.relu(self.conv2(x))
-        x = F.relu(self.upconv1(x))
-        x = self.upconv2(x)
-        x = x.view(-1, IMG_SIZE*IMG_SIZE)  # B,2,D,D -> Bx2,DxD
-        x = F.log_softmax(x, dim=1)
-        return x
-
 """
 Creates a 
 """
@@ -71,7 +53,7 @@ class DataGenerator():
     def __init__(self):
         self.H = IMG_SIZE
         self.W = IMG_SIZE
-        self.padding = 3
+         self.padding = 3
 
     def next_batch(self, batch_size=8):
         data = [self._get_random_data() for i in range(batch_size)]
@@ -82,16 +64,34 @@ class DataGenerator():
         m = np.zeros((self.H, self.W, 3), dtype=np.uint8)
         r = np.random.randint(p, self.H - p)
         c = np.random.randint(p, self.W - p)
-        m[r-p:r+p+1, c-p:c+p+1, 2] = 255
-        kr, kc = r, c
+        start_r = r - p; end_r = r + p + 1
+        start_c = c - p; end_c = c + p + 1
+        m[start_r:end_r, start_c:end_c, 2] = 255
+        r1, c1 = r, c
+        if start_c == 0:
+            m[start_r:end_r, end_c, 1] = 255
+        else:
+            m[start_r:end_r, start_c - 1, 1] = 255
         # if c - p 
+
+        # ADD another red, but without the extra side
+        r = np.random.randint(p, self.H - p)
+        c = np.random.randint(p, self.W - p)
+        m[r-p:r+p+1, c-p:c+p+1, 2] = 255
 
         # ADD BLUE
         r = np.random.randint(p, self.H - p)
         c = np.random.randint(p, self.W - p)
         m[r-p:r+p+1, c-p:c+p+1, 0] = 255
+        r2, c2 = r, c
 
-        return [m, (kr,kc), (r,c)]
+        # ADD GREEN
+        r = np.random.randint(p, self.H - p)
+        c = np.random.randint(p, self.W - p)
+        m[r-p:r+p+1, c-p:c+p+1, 1] = 255
+        r3, c3 = r, c
+
+        return [m, (r1,c1), (r2,c2), (r3,c3)]
 
     def convert_data_batch_to_tensor(self, data, use_cuda=False):
         keypts_idx = []
@@ -101,6 +101,8 @@ class DataGenerator():
             r, c = d[1]
             keypts_idx.append(r*self.W + c)
             r, c = d[2]
+            keypts_idx.append(r*self.W + c)
+            r, c = d[3]
             keypts_idx.append(r*self.W + c)
 
             md = np.transpose(m, [2,0,1]).astype(np.float32)
@@ -113,11 +115,33 @@ class DataGenerator():
             tm = tm.cuda()
         return tm, tki
 
+class ConvNet(nn.Module):
+    def __init__(self):
+        super(ConvNet, self).__init__()
+        kernel_sz = 3
+        stride = 1
+        pad = 1
+        self.conv1 = nn.Conv2d(3, 16, kernel_size=kernel_sz, stride=stride, padding=pad)
+        self.conv2 = nn.Conv2d(16, 32, kernel_size=kernel_sz, stride=stride, padding=pad)
+        self.upconv1 = nn.ConvTranspose2d(32, 16, kernel_size=kernel_sz, stride=stride, padding=pad)
+        self.upconv2 = nn.ConvTranspose2d(16, 3, kernel_size=kernel_sz, stride=stride, padding=pad)
+
+    def forward(self, x):
+        batch_sz = len(x)
+        x = F.relu(self.conv1(x))
+        x = F.relu(self.conv2(x))
+        x = F.relu(self.upconv1(x))
+        x = self.upconv2(x)
+        x = x.view(-1, IMG_SIZE*IMG_SIZE)  # B,2,D,D -> Bx2,DxD
+        x = F.log_softmax(x, dim=1)
+        return x
+
+
 @persistent_locals
 def train(model, dg):
 
     epochs = 10
-    n_iters = 100
+    n_iters = 30
     batch_size = 16
     lr = 3e-3
 
@@ -152,7 +176,9 @@ def test(model, dg):
     predl = output.max(1, keepdim=True)[1]
     correct = predl.eq(test_y.view_as(predl)).sum().item()
     pred = predl.cpu().numpy().squeeze()
-    pred = pred.reshape((test_batch_sz, 2))
+    pred = pred.reshape((test_batch_sz, 3))
+
+    print("Correct: %d out of %d  (%.3f)"%(correct, len(predl), float(correct)/len(predl)))
 
     for ix in range(len(test_data)):
         d = test_data[ix]
@@ -168,11 +194,11 @@ def test(model, dg):
             pred_pt = (pred_pt_idx / dg.W, pred_pt_idx % dg.W)
             print("GT: %d %d, Pred: %d %d"%(gt_pt[0],gt_pt[1],pred_pt[0],pred_pt[1]))
 
-            cv2.circle(m, tuple(gt_pt)[::-1], 1, (0,255,0))
-            cv2.circle(m_copy, tuple(pred_pt)[::-1], 1, (0,255,0))
+            cv2.circle(m, tuple(gt_pt)[::-1], 1, (255,255,255))
+            cv2.circle(m_copy, tuple(pred_pt)[::-1], 1, (255,255,255))
 
-        cv2.imshow("gt", m)
-        cv2.imshow("pred", m_copy)
+        cv2.imshow("gt", cv2.resize(m, (224,224), interpolation=cv2.INTER_NEAREST))
+        cv2.imshow("pred", cv2.resize(m_copy, (224,224), interpolation=cv2.INTER_NEAREST))
         cv2.waitKey(0)
 
 
@@ -186,8 +212,6 @@ if __name__ == '__main__':
 
     model = ConvNet()
     model.cuda()
-    train_x, train_y = dg.convert_data_batch_to_tensor(data, use_cuda=True)
-    model(train_x)
 
     train(model, dg)
     test(model, dg)
